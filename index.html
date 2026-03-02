@@ -1,0 +1,874 @@
+<!DOCTYPE html>
+<!--
+  SkiesFifty SAF Calculator
+  Version:  1.1.0
+  License:  MIT
+
+  Calculation standards:
+    IATA SAF Accounting & Reporting Methodology (§2.2 standard values, §3.3 formula)
+    ICAO CORSIA Default Lifecycle Values (2023, LHV basis, gCO₂e/MJ)
+    ASTM D7566 (50% SAF blend limit)
+    ISO 14083:2023 Table K.3 (Jet-A/A-1 energy density 43.2 MJ/kg)
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SAF Calculator — SkiesFifty</title>
+  <style>
+    /* ── Design tokens ─────────────────────────────────────────── */
+    :root {
+      --primary:       #0d2137;
+      --primary-mid:   #1a3c5e;
+      --primary-light: #2d6a9f;
+      --purple:        #5C3272;
+      --green:         #1d8a5e;
+      --green-bg:      rgba(29,138,94,0.08);
+      --green-border:  rgba(29,138,94,0.25);
+      --orange:        #c0692a;
+      --orange-bg:     rgba(192,105,42,0.08);
+      --orange-border: rgba(192,105,42,0.25);
+      --red:           #b03030;
+      --bg:            #eef2f6;
+      --card:          #ffffff;
+      --text:          #1c2b3a;
+      --muted:         #6b7c8d;
+      --border:        #d8e0e8;
+      --input-bg:      #f7f9fb;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      background: url('sky_empty.jpg') center 30% / cover no-repeat;
+      color: #fff;
+      padding: 2rem 2rem 2rem;
+      text-align: center;
+      text-shadow: 0 1px 6px rgba(0,0,0,0.45);
+    }
+
+    /* SkiesFifty brand lockup */
+    .brand-lockup {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.55rem;
+      margin-bottom: 1.6rem;
+    }
+    .brand-logo {
+      height: 56px;
+      width: auto;
+    }
+    .brand-tagline {
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 2.5px;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.6);
+    }
+    header h1 { font-size: 2.1rem; font-weight: 700; letter-spacing: -0.5px; }
+    header p  { margin-top: 0.4rem; font-size: 0.95rem; opacity: 0.7; }
+
+    /* ── Layout ── */
+    .container { max-width: 1120px; margin: 0 auto; padding: 2rem 1.5rem 3rem; }
+    .main-grid {
+      display: grid;
+      grid-template-columns: minmax(0,1fr) minmax(0,1fr);
+      gap: 1.25rem;
+    }
+    @media (max-width: 780px) { .main-grid { grid-template-columns: 1fr; } }
+    .full-width { grid-column: 1 / -1; }
+
+    /* ── Card ── */
+    .card {
+      background: var(--card);
+      border-radius: 14px;
+      padding: 1.5rem;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 12px rgba(0,0,0,0.05);
+    }
+    .section-title {
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 1.1rem;
+      padding-bottom: 0.75rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    /* ── Forms ── */
+    .form-group { margin-bottom: 1.1rem; }
+    .form-group:last-child { margin-bottom: 0; }
+    label {
+      display: block;
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 0.35rem;
+    }
+    input[type="number"], select {
+      width: 100%;
+      padding: 0.6rem 0.85rem;
+      background: var(--input-bg);
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      font-size: 0.9375rem;
+      color: var(--text);
+      appearance: none;
+      -webkit-appearance: none;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    input[type="number"]:focus, select:focus {
+      outline: none;
+      border-color: var(--primary-light);
+      box-shadow: 0 0 0 3px rgba(45,106,159,0.12);
+    }
+
+    /* Volume row */
+    .vol-row { display: grid; grid-template-columns: 1fr 9rem; gap: 0.5rem; }
+    .unit-select {
+      padding-right: 2rem;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%236b7c8d' d='M1 1l5 5 5-5'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 0.7rem center;
+      background-size: 10px;
+      cursor: pointer;
+    }
+
+    /* Price row */
+    .price-row { position: relative; }
+    .price-row .dollar {
+      position: absolute; left: 0.85rem; top: 50%; transform: translateY(-50%);
+      font-weight: 600; color: var(--muted); pointer-events: none; z-index: 1;
+    }
+    .price-row input { padding-left: 1.5rem; padding-right: 5.5rem; }
+    .price-row .price-suffix {
+      position: absolute; right: 0.75rem; top: 50%; transform: translateY(-50%);
+      font-size: 0.78rem; color: var(--muted); pointer-events: none; white-space: nowrap;
+    }
+
+    /* Density / mass equivalence note */
+    .density-note {
+      margin-top: 0.45rem;
+      padding: 0.4rem 0.7rem;
+      background: rgba(45,106,159,0.07);
+      border: 1px solid rgba(45,106,159,0.18);
+      border-radius: 6px;
+      font-size: 0.76rem;
+      color: var(--primary-light);
+    }
+    .density-note strong { font-weight: 700; }
+
+    /* EF mode toggle (WTW / TTW) */
+    .ef-toggle-wrap { display: flex; flex-direction: column; gap: 0.3rem; }
+    .ef-toggle {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .ef-toggle button {
+      padding: 0.55rem 0.5rem;
+      border: none;
+      background: var(--input-bg);
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--muted);
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+      line-height: 1.3;
+      text-align: center;
+    }
+    .ef-toggle button:first-child { border-right: 1px solid var(--border); }
+    .ef-toggle button.active {
+      background: var(--primary-mid);
+      color: #fff;
+    }
+    .ef-note {
+      font-size: 0.72rem;
+      color: var(--muted);
+      padding: 0.3rem 0.5rem;
+      background: var(--bg);
+      border-radius: 5px;
+    }
+    .ef-note strong { color: var(--primary-mid); }
+
+    /* Blend slider */
+    .slider-wrap { display: flex; align-items: center; gap: 0.85rem; }
+    .slider-wrap input[type="range"] {
+      flex: 1; -webkit-appearance: none; appearance: none;
+      height: 5px; background: var(--border); border-radius: 3px;
+      outline: none; cursor: pointer; padding: 0; border: none; box-shadow: none;
+    }
+    .slider-wrap input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none; width: 20px; height: 20px; border-radius: 50%;
+      background: var(--primary-mid); border: 2.5px solid #fff;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.25);
+    }
+    .slider-wrap input[type="range"]::-moz-range-thumb {
+      width: 18px; height: 18px; border-radius: 50%;
+      background: var(--primary-mid); border: 2.5px solid #fff;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.25); cursor: pointer;
+    }
+    .slider-value { min-width: 3.5rem; text-align: right; font-size: 1.15rem; font-weight: 700; color: var(--primary-mid); }
+    .slider-hints { display: flex; justify-content: space-between; font-size: 0.68rem; color: var(--muted); margin-top: 0.2rem; }
+
+    /* Feedstock CI pill */
+    .feedstock-pill {
+      display: flex; justify-content: space-between; align-items: center;
+      flex-wrap: wrap; gap: 0.3rem; margin-top: 0.5rem;
+      padding: 0.45rem 0.75rem;
+      background: var(--input-bg); border: 1px solid var(--border); border-radius: 6px;
+      font-size: 0.78rem; color: var(--muted);
+    }
+    .feedstock-pill .ci-value { font-weight: 700; color: var(--green); }
+
+    /* ── Results metrics ── */
+    .results-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+    .metric         { background: var(--bg);         border-radius: 10px; padding: 0.9rem 1rem; text-align: center; }
+    .metric.span2   { grid-column: 1 / -1; }
+    .metric.green   { background: var(--green-bg);   border: 1.5px solid var(--green-border); }
+    .metric.orange  { background: var(--orange-bg);  border: 1.5px solid var(--orange-border); }
+    .metric.neutral { background: #f0f4f8; }
+    .metric-label   { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: var(--muted); margin-bottom: 0.3rem; }
+    .metric-value   { font-size: 1.45rem; font-weight: 700; line-height: 1.15; color: var(--text); }
+    .metric.green  .metric-value { color: var(--green); }
+    .metric.orange .metric-value { color: var(--orange); }
+    .metric-sub     { font-size: 0.72rem; color: var(--muted); margin-top: 0.2rem; }
+
+    /* ── Emissions bar chart ── */
+    .chart-wrap { display: flex; flex-direction: column; gap: 0.85rem; margin-top: 0.25rem; }
+    .bar-row    { display: flex; align-items: center; gap: 1rem; }
+    .bar-label  { width: 155px; flex-shrink: 0; font-size: 0.8rem; font-weight: 500; color: var(--text); }
+    .bar-track  { flex: 1; height: 30px; background: var(--bg); border-radius: 6px; overflow: hidden; }
+    .bar-fill {
+      height: 100%; border-radius: 6px; display: flex; align-items: center;
+      padding: 0 0.6rem; font-size: 0.72rem; font-weight: 700; color: #fff;
+      transition: width 0.35s cubic-bezier(0.25,0.8,0.25,1); min-width: 2px; white-space: nowrap;
+    }
+    .bar-fill.conventional { background: var(--red); }
+    .bar-fill.blended      { background: var(--green); }
+    .bar-amount { width: 110px; flex-shrink: 0; font-size: 0.78rem; font-weight: 600; text-align: right; }
+
+    /* ── IATA formula display box ── */
+    .formula-box {
+      margin-top: 1rem;
+      padding: 0.85rem 1rem;
+      background: rgba(92,50,114,0.05);
+      border: 1px solid rgba(92,50,114,0.18);
+      border-radius: 8px;
+      font-size: 0.78rem;
+      color: var(--text);
+      line-height: 1.6;
+    }
+    .formula-box .formula-title {
+      font-size: 0.68rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.8px; color: var(--purple); margin-bottom: 0.4rem;
+    }
+    .formula-box code {
+      display: block;
+      font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+      font-size: 0.82rem;
+      background: rgba(92,50,114,0.07);
+      border-radius: 4px;
+      padding: 0.35rem 0.6rem;
+      margin: 0.25rem 0;
+      color: var(--purple);
+    }
+    .formula-params { font-size: 0.72rem; color: var(--muted); margin-top: 0.35rem; }
+
+    /* ── Reference section ── */
+    .ref-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 0.85rem; margin-top: 0.5rem; }
+    .ref-item { padding: 0.9rem 1rem; background: var(--bg); border-radius: 10px; }
+    .ref-item h4 { font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--primary-mid); margin-bottom: 0.35rem; }
+    .ref-item p  { font-size: 0.8rem; color: var(--muted); line-height: 1.5; }
+
+    footer {
+      text-align: center; padding: 1.5rem 2rem; font-size: 0.78rem; color: var(--muted);
+      border-top: 1px solid var(--border); background: var(--card);
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="brand-lockup">
+    <img src="skiesfifty-logo-white.png" alt="SkiesFifty" class="brand-logo">
+    <span class="brand-tagline">SAF Calculator</span>
+  </div>
+
+  <h1>Sustainable Aviation Fuel</h1>
+  <p>Lifecycle Emissions &amp; Cost Analysis</p>
+</header>
+
+<div class="container">
+  <div class="main-grid">
+
+    <!-- ── Left column: Inputs ── -->
+    <div>
+      <div class="card" style="margin-bottom:1.25rem;">
+        <div class="section-title">Fuel Parameters</div>
+
+        <div class="form-group">
+          <label>Total Fuel Quantity</label>
+          <div class="vol-row">
+            <input type="number" id="fuelVolume" value="10000" min="0.001" step="100">
+            <select id="unitSelect" class="unit-select">
+              <option value="liters"  selected>Liters (L)</option>
+              <option value="gallons">US Gallons (gal)</option>
+              <option value="kg">Kilograms (kg)</option>
+              <option value="tonnes">Metric Tonnes (MT)</option>
+              <option value="lbs">Pounds (lbs)</option>
+            </select>
+          </div>
+          <!-- Shows mass equivalents of entered volume; updates on every calculation -->
+          <div class="density-note" id="densityNote"></div>
+        </div>
+
+        <div class="form-group">
+          <label>SAF Blend Percentage</label>
+          <div class="slider-wrap">
+            <input type="range" id="blendSlider" min="0" max="50" value="20" step="1">
+            <span class="slider-value" id="blendDisplay">20%</span>
+          </div>
+          <div class="slider-hints">
+            <span>0% (no SAF)</span>
+            <span>50% max — ASTM D7566</span>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>SAF Feedstock / Production Pathway</label>
+          <!-- Options populated by JS from the FEEDSTOCKS constant (CORSIA Default LCA values) -->
+          <select id="feedstock"></select>
+          <div class="feedstock-pill">
+            <span>CORSIA default LCA (LCASAF)</span>
+            <span>
+              <span class="ci-value" id="ciDisplay">—</span>&nbsp;gCO₂e/MJ
+              &nbsp;&middot;&nbsp;
+              <span class="ci-value" id="reductionDisplay">—</span>&nbsp;GHG reduction vs CAF
+            </span>
+          </div>
+        </div>
+
+        <!-- Emissions factor scope: IATA §3.2 Option 1 (TTW) or Option 2 (WTW) -->
+        <div class="form-group">
+          <label>Emissions Factor (IATA §3.2)</label>
+          <div class="ef-toggle-wrap">
+            <div class="ef-toggle">
+              <button id="btnWTW" class="active">
+                Option 2 — WTW<br><small>3.84 kg CO₂e/kg</small>
+              </button>
+              <button id="btnTTW">
+                Option 1 — TTW<br><small>3.16 kg CO₂/kg</small>
+              </button>
+            </div>
+            <div class="ef-note" id="efNote">
+              <strong>Well-to-Wake (WTW)</strong> — includes upstream (WTT) + combustion (TTW).
+              Recommended for GHGP sustainability reporting.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="section-title">Pricing</div>
+        <div class="form-group">
+          <label>Conventional Jet Fuel Price</label>
+          <div class="price-row">
+            <span class="dollar">$</span>
+            <input type="number" id="convPrice" value="0.85" min="0" step="0.01">
+            <span class="price-suffix">/ liter</span>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>SAF Price</label>
+          <div class="price-row">
+            <span class="dollar">$</span>
+            <input type="number" id="safPrice" value="2.50" min="0" step="0.01">
+            <span class="price-suffix">/ liter</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Right column: Results ── -->
+    <div class="card">
+      <div class="section-title">Results</div>
+      <div class="results-grid">
+
+        <div class="metric">
+          <div class="metric-label">SAF Quantity (Neat)</div>
+          <div class="metric-value" id="r-safVol">—</div>
+          <div class="metric-sub"  id="r-safVolUnit">liters</div>
+        </div>
+
+        <div class="metric">
+          <div class="metric-label">Conventional Quantity</div>
+          <div class="metric-value" id="r-convVol">—</div>
+          <div class="metric-sub"  id="r-convVolUnit">liters</div>
+        </div>
+
+        <div class="metric">
+          <div class="metric-label">Baseline Emissions (100% CAF)</div>
+          <div class="metric-value" id="r-baseEmit">—</div>
+          <div class="metric-sub"  id="r-baseEmitUnit">tonnes CO₂e</div>
+        </div>
+
+        <div class="metric">
+          <div class="metric-label">Blended Emissions</div>
+          <div class="metric-value" id="r-blendEmit">—</div>
+          <div class="metric-sub"  id="r-blendEmitUnit">tonnes CO₂e</div>
+        </div>
+
+        <!-- IATA §3.3 ERy — the primary emissions reduction output -->
+        <div class="metric green span2">
+          <div class="metric-label" id="r-erLabel">Emissions Reduction ERy (WTW)</div>
+          <div class="metric-value" id="r-co2Save">—</div>
+          <div class="metric-sub"  id="r-co2SavePct">—</div>
+        </div>
+
+        <div class="metric">
+          <div class="metric-label">Conventional Fuel Cost</div>
+          <div class="metric-value" id="r-convCost">—</div>
+          <div class="metric-sub">USD</div>
+        </div>
+
+        <div class="metric">
+          <div class="metric-label">SAF Blend Total Cost</div>
+          <div class="metric-value" id="r-safCost">—</div>
+          <div class="metric-sub">USD</div>
+        </div>
+
+        <div class="metric orange span2">
+          <div class="metric-label">Cost Premium for SAF Blend</div>
+          <div class="metric-value" id="r-premium">—</div>
+          <div class="metric-sub"  id="r-premiumPct">—</div>
+        </div>
+
+        <div class="metric span2 neutral">
+          <div class="metric-label" id="r-cptLabel">Cost per Tonne CO₂e Avoided</div>
+          <div class="metric-value" id="r-costPerTonne">—</div>
+          <div class="metric-sub"  id="r-costPerTonneUnit">USD / tonne CO₂e</div>
+        </div>
+
+      </div>
+
+      <!-- Live rendering of the IATA §3.3 formula with current input values -->
+      <div class="formula-box">
+        <div class="formula-title">IATA §3.3 — Emissions Reduction Formula</div>
+        <code id="formulaDisplay">ERy = EF × [mSAF × (1 − LCASAF / LCACAF)]</code>
+        <div class="formula-params">
+          EF: <strong id="formula-ef">—</strong> &nbsp;·&nbsp;
+          mSAF: <strong id="formula-msaf">—</strong> &nbsp;·&nbsp;
+          LCASAF/LCACAF: <strong id="formula-ratio">—</strong>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Emissions bar chart ── -->
+    <div class="card full-width">
+      <div class="section-title">Emissions Comparison</div>
+      <div class="chart-wrap" id="chart"></div>
+    </div>
+
+    <!-- ── Reference & methodology ── -->
+    <div class="card full-width">
+      <div class="section-title">Reference &amp; Methodology</div>
+      <div class="ref-grid">
+        <div class="ref-item">
+          <h4>IATA Methodology (§2.2)</h4>
+          <p>
+            WTW EF: <strong>3.84 kg CO₂e/kg</strong> fuel (§2.2.4)<br>
+            TTW EF: <strong>3.16 kg CO₂/kg</strong> fuel (§2.2.5)<br>
+            CAF baseline (LCACAF): <strong>89 gCO₂e/MJ</strong> (§2.2.3)<br>
+            Source: IATA SAF Accounting &amp; Reporting Methodology
+          </p>
+        </div>
+        <div class="ref-item">
+          <h4>IATA Formula (§3.3)</h4>
+          <p>
+            ERy = EF &times; [mSAF &times; (1 &minus; LCASAF / LCACAF)]<br>
+            Verified example (§4): 10,000 t HEFA-UCO (16.7 gCO₂e/MJ)<br>
+            WTW: <strong>31,194.61 t CO₂e</strong> &nbsp;·&nbsp; TTW: <strong>25,670.56 t CO₂</strong>
+          </p>
+        </div>
+        <div class="ref-item">
+          <h4>Physical Assumptions</h4>
+          <p>
+            Jet-A/A-1 density: <strong>0.800 kg/L</strong><br>
+            Energy density: 43.2 MJ/kg (ISO 14083:2023 Table K.3)<br>
+            Mass units convert via density; volume units via 3.785411784 L/gal.
+          </p>
+        </div>
+        <div class="ref-item">
+          <h4>CORSIA LCA Values</h4>
+          <p>Feedstock CI values from ICAO CORSIA Default Lifecycle Values (LHV basis, gCO₂e/MJ). Actual values from supplier PoS documentation may differ.</p>
+        </div>
+        <div class="ref-item">
+          <h4>Blend Limit</h4>
+          <p>ASTM D7566 permits up to 50% SAF. WTW scope covers well-to-wake emissions. Non-CO₂ effects (NOx, contrails) are excluded per IATA scope.</p>
+        </div>
+        <div class="ref-item">
+          <h4>Cost Context</h4>
+          <p>SAF currently costs 2–5× conventional jet fuel. US IRA blending credits and EU SAF mandates (2025+) are improving economics. Prices vary by feedstock and region.</p>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /main-grid -->
+</div><!-- /container -->
+
+<footer>
+  SkiesFifty SAF Calculator &mdash; Calculations per IATA SAF Accounting &amp; Reporting Methodology.
+  CORSIA LCA values per ICAO. For informational use only.
+</footer>
+
+<script>
+  // ═══════════════════════════════════════════════════════════════════════════════
+  // SkiesFifty SAF Calculator — core calculation engine
+  //
+  // Formula:  ERy = EF × [mSAF,y × (1 − LCASAF / LCACAF)]   (IATA §3.3)
+  // Verified: 10,000 t SAF @ 16.7 gCO₂e/MJ → WTW 31,194.61 t, TTW 25,670.56 t
+  // ═══════════════════════════════════════════════════════════════════════════════
+
+  // ── IATA §2.2 Standard constants ──────────────────────────────────────────────
+  const EF_WTW  = 3.84;   // kg CO₂e/kg fuel — Well-to-Wake (§2.2.4)
+  const EF_TTW  = 3.16;   // kg CO₂/kg  fuel — Tank-to-Wake (§2.2.5)
+  const LCACAF  = 89.0;   // gCO₂e/MJ — conventional Jet-A/A-1 baseline (§2.2.3)
+  const DENSITY = 0.800;  // kg/L — Jet-A/A-1 standard density (ISO 14083:2023)
+
+  // ── ICAO CORSIA Default Lifecycle Values (LHV basis, gCO₂e/MJ, 2023) ─────────
+  const FEEDSTOCKS = [
+    { label: 'HEFA — Used Cooking Oil (UCO)',      ci: 14.06 },
+    { label: 'HEFA — Tallow / Animal Fat',         ci: 17.4  },
+    { label: 'HEFA — Palm Fatty Acid Distillate',  ci: 17.4  },
+    { label: 'AtJ — Corn Stover (Alcohol-to-Jet)', ci: 17.9  },
+    { label: 'AtJ — Sugarcane (Alcohol-to-Jet)',   ci: 32.7  },
+    { label: 'FT-SPK — Municipal Solid Waste',     ci: 18.1  },
+    { label: 'FT-SPK — Forestry Residues',         ci: 12.8  },
+    { label: 'DSHC — Direct Sugar to Hydrocarbon', ci:  3.8  },
+  ];
+
+  // ── Unit definitions ───────────────────────────────────────────────────────────
+  // Each entry defines how to convert to/from litres (the internal working unit)
+  // and UI display properties (label, input step, default prices).
+  const UNITS = {
+    liters:  {
+      label: 'L',   resultLabel: 'liters',        suffix: '/ liter',
+      step: 100,    priceStep: 0.01,
+      toLitres:   v => v,
+      fromLitres: v => v,
+      pConvDef: 0.85,  pSAFDef: 2.50,
+    },
+    gallons: {
+      label: 'gal', resultLabel: 'US gallons',    suffix: '/ US gal',
+      step: 100,    priceStep: 0.01,
+      toLitres:   v => v * 3.785411784,
+      fromLitres: v => v / 3.785411784,
+      pConvDef: 3.22,  pSAFDef: 9.46,
+    },
+    kg: {
+      label: 'kg',  resultLabel: 'kilograms',     suffix: '/ kg',
+      step: 100,    priceStep: 0.01,
+      toLitres:   v => v / DENSITY,
+      fromLitres: v => v * DENSITY,
+      pConvDef: 1.06,  pSAFDef: 3.13,
+    },
+    tonnes: {
+      label: 'MT',  resultLabel: 'metric tonnes', suffix: '/ MT',
+      step: 0.1,    priceStep: 1,
+      toLitres:   v => v * 1000 / DENSITY,
+      fromLitres: v => v * DENSITY / 1000,
+      pConvDef: 1062,  pSAFDef: 3125,
+    },
+    lbs: {
+      label: 'lbs', resultLabel: 'pounds',        suffix: '/ lb',
+      step: 100,    priceStep: 0.001,
+      toLitres:   v => v * 0.453592 / DENSITY,
+      fromLitres: v => v * DENSITY / 0.453592,
+      pConvDef: 0.482, pSAFDef: 1.42,
+    },
+  };
+
+  // ── App state ─────────────────────────────────────────────────────────────────
+  let currentUnit = 'liters';
+  let efMode      = 'wtw';    // 'wtw' (IATA Option 2) | 'ttw' (IATA Option 1)
+
+  // ── Formatting helpers ────────────────────────────────────────────────────────
+
+  /**
+   * Format a dimensionless number with automatic scale suffixes (M, B)
+   * and locale-aware comma separators.
+   */
+  function fmt(n) {
+    if (n === null || n === undefined || isNaN(n)) return '—';
+    if (n >= 1e9) return (n / 1e9).toFixed(2) + 'B';
+    if (n >= 1e6) return (n / 1e6).toFixed(2) + 'M';
+    if (n >= 1e4) return n.toLocaleString('en-US', { maximumFractionDigits: 0 });
+    if (n >= 100) return n.toLocaleString('en-US', { maximumFractionDigits: 1 });
+    return n.toFixed(n < 1 ? 4 : 2);
+  }
+
+  /** Format a USD monetary value with automatic scale suffixes and a $ prefix. */
+  function fmtCurrency(n) {
+    if (isNaN(n) || n === null) return '—';
+    if (n >= 1e9) return '$' + (n / 1e9).toFixed(2) + 'B';
+    if (n >= 1e6) return '$' + (n / 1e6).toFixed(2) + 'M';
+    if (n >= 1e3) return '$' + n.toLocaleString('en-US', { maximumFractionDigits: 0 });
+    return '$' + n.toFixed(2);
+  }
+
+  /**
+   * Round a converted volume value to a sensible number of significant figures,
+   * suppressing spurious decimal noise introduced by unit conversion.
+   */
+  function smartRound(v, unitKey) {
+    if (unitKey === 'tonnes') return parseFloat(v.toFixed(3));
+    if (v >= 10000) return Math.round(v);
+    if (v >= 1000)  return Math.round(v * 10)   / 10;
+    if (v >= 10)    return Math.round(v * 100)   / 100;
+    return            Math.round(v * 1000) / 1000;
+  }
+
+  // ── EF mode toggle (WTW ↔ TTW) ───────────────────────────────────────────────
+
+  /** Switch between Well-to-Wake (Option 2) and Tank-to-Wake (Option 1) scope. */
+  function setEF(mode) {
+    efMode = mode;
+    document.getElementById('btnWTW').classList.toggle('active', mode === 'wtw');
+    document.getElementById('btnTTW').classList.toggle('active', mode === 'ttw');
+    document.getElementById('efNote').innerHTML = mode === 'wtw'
+      ? '<strong>Well-to-Wake (WTW)</strong> — includes upstream (WTT) + combustion (TTW). Recommended for GHGP sustainability reporting.'
+      : '<strong>Tank-to-Wake (TTW)</strong> — combustion emissions only (Scope 1). Used for CORSIA / EU ETS regulatory reporting.';
+    calculate();
+  }
+
+  // ── Unit switching ────────────────────────────────────────────────────────────
+
+  /**
+   * Switch the active volume unit. Converts the current fuel volume and both
+   * price inputs from the old unit into the new unit, preserving the underlying
+   * per-litre monetary values.
+   */
+  function setUnit(newKey) {
+    const oldU = UNITS[currentUnit];
+    const newU = UNITS[newKey];
+
+    // Convert fuel volume to new unit
+    const litVal = oldU.toLitres(parseFloat(document.getElementById('fuelVolume').value) || 0);
+    document.getElementById('fuelVolume').value = smartRound(newU.fromLitres(litVal), newKey);
+    document.getElementById('fuelVolume').step  = newU.step;
+
+    // Convert prices: old $/unit → $/litre → new $/unit
+    const oldUnitInLitres = oldU.toLitres(1);
+    const newUnitInLitres = newU.toLitres(1);
+    const convPerLitre = (parseFloat(document.getElementById('convPrice').value) || 0) / oldUnitInLitres;
+    const safPerLitre  = (parseFloat(document.getElementById('safPrice').value)  || 0) / oldUnitInLitres;
+    const priceDec = newKey === 'tonnes' ? 0 : newKey === 'lbs' ? 3 : 2;
+    document.getElementById('convPrice').value = (convPerLitre * newUnitInLitres).toFixed(priceDec);
+    document.getElementById('safPrice').value  = (safPerLitre  * newUnitInLitres).toFixed(priceDec);
+    document.getElementById('convPrice').step  = newU.priceStep;
+    document.getElementById('safPrice').step   = newU.priceStep;
+
+    // Both price suffix labels always show the same unit string
+    document.querySelectorAll('.price-suffix').forEach(el => el.textContent = newU.suffix);
+
+    currentUnit = newKey;
+    calculate();
+  }
+
+  // ── Core calculation (IATA §3.3) ──────────────────────────────────────────────
+
+  /** Read the fuel volume input and return its value in litres. */
+  function getLitres() {
+    return UNITS[currentUnit].toLitres(
+      parseFloat(document.getElementById('fuelVolume').value) || 0
+    );
+  }
+
+  /**
+   * Main calculation and render function.
+   *
+   * Reads all user inputs, applies the IATA §3.3 emissions reduction formula,
+   * computes costs, then updates every result element and the bar chart.
+   */
+  function calculate() {
+    const V         = getLitres();
+    const blendFrac = parseFloat(document.getElementById('blendSlider').value) / 100;
+    const LCASAF    = parseFloat(document.getElementById('feedstock').value);
+    const pPerUnit  = parseFloat(document.getElementById('convPrice').value) || 0;
+    const pSAFUnit  = parseFloat(document.getElementById('safPrice').value)  || 0;
+    const U         = UNITS[currentUnit];
+
+    // ── Volumes & mass ─────────────────────────────────────────────────────────
+    const safVol  = V * blendFrac;
+    const convVol = V * (1 - blendFrac);
+
+    const mTotal_kg = V      * DENSITY;  // total fuel mass (kg)
+    const mSAF_kg   = safVol * DENSITY;  // neat SAF mass   (kg)
+    const mTotal_t  = mTotal_kg / 1000;  // total fuel mass (tonnes)
+    const mSAF_t    = mSAF_kg   / 1000;  // neat SAF mass   (tonnes) — mSAF,y in IATA §3.3
+
+    // ── IATA §3.3 Emissions Reduction ─────────────────────────────────────────
+    //   ERy = EF × [mSAF,y × (1 − LCASAF / LCACAF)]
+    //
+    //   Option 2 WTW: EF = EF_WTW = 3.84 kg CO₂e/kg  (§2.2.4)
+    //   Option 1 TTW: EF = EF_TTW = 3.16 kg CO₂/kg   (§2.2.5)
+    const EF       = efMode === 'wtw' ? EF_WTW : EF_TTW;
+    const lcaRatio = LCASAF / LCACAF;                           // dimensionless
+
+    const baseEmitT    = EF * mTotal_t;                         // baseline: 100% CAF (tonnes)
+    const ER_t         = EF * mSAF_t * (1 - lcaRatio);         // ERy — emissions reduction (tonnes)
+    const blendedEmitT = baseEmitT - ER_t;                      // blended-fuel scenario (tonnes)
+    const savingsPct   = baseEmitT > 0 ? (ER_t / baseEmitT) * 100 : 0;
+
+    // ── Costs ──────────────────────────────────────────────────────────────────
+    const convPerLitre = pPerUnit / U.toLitres(1);   // $/litre (internal working unit)
+    const safPerLitre  = pSAFUnit / U.toLitres(1);
+    const convCost = V      * convPerLitre;
+    const safCost  = safVol * safPerLitre + convVol * convPerLitre;
+    const premium  = safCost - convCost;
+    const premPct  = convCost > 0 ? (premium / convCost) * 100 : 0;
+    const costPerT = ER_t > 0 ? premium / ER_t : null;
+
+    // ── Display labels ─────────────────────────────────────────────────────────
+    const unitLabel = efMode === 'wtw' ? 'tonnes CO₂e' : 'tonnes CO₂';
+    const efLabel   = efMode === 'wtw' ? 'WTW'         : 'TTW';
+    const feedRed   = ((1 - lcaRatio) * 100).toFixed(1);
+
+    // ── Density / mass equivalence note ───────────────────────────────────────
+    const totalMassMT = (mTotal_kg / 1000).toFixed(3);
+    const totalMassKg = mTotal_kg.toFixed(1);
+    let densityNote = `Using Jet-A/A-1 density <strong>0.800 kg/L</strong>`;
+    if (currentUnit !== 'liters')  densityNote += ` &mdash; ${fmt(V)} L`;
+    if (currentUnit !== 'tonnes')  densityNote += ` = <strong>${totalMassMT} MT</strong>`;
+    if (currentUnit !== 'kg')      densityNote += ` (${fmt(parseFloat(totalMassKg))} kg)`;
+    document.getElementById('densityNote').innerHTML = densityNote;
+
+    // ── Feedstock pill ─────────────────────────────────────────────────────────
+    document.getElementById('ciDisplay').textContent        = LCASAF;
+    document.getElementById('reductionDisplay').textContent = feedRed + '%';
+
+    // ── Volume results ─────────────────────────────────────────────────────────
+    document.getElementById('r-safVolUnit').textContent  = U.resultLabel;
+    document.getElementById('r-convVolUnit').textContent = U.resultLabel;
+    document.getElementById('r-safVol').textContent      = fmt(U.fromLitres(safVol));
+    document.getElementById('r-convVol').textContent     = fmt(U.fromLitres(convVol));
+
+    // ── Emissions results ──────────────────────────────────────────────────────
+    document.getElementById('r-baseEmitUnit').textContent   = unitLabel;
+    document.getElementById('r-blendEmitUnit').textContent  = unitLabel;
+    document.getElementById('r-baseEmit').textContent       = fmt(baseEmitT);
+    document.getElementById('r-blendEmit').textContent      = fmt(blendedEmitT);
+    document.getElementById('r-erLabel').textContent        = `Emissions Reduction ERy (${efLabel})`;
+    document.getElementById('r-co2Save').textContent        = fmt(ER_t) + ' t';
+    document.getElementById('r-co2SavePct').textContent     =
+      `${savingsPct.toFixed(1)}% reduction  ·  feedstock CI saves ${feedRed}% per kg SAF`;
+
+    // ── Cost results ───────────────────────────────────────────────────────────
+    document.getElementById('r-convCost').textContent       = fmtCurrency(convCost);
+    document.getElementById('r-safCost').textContent        = fmtCurrency(safCost);
+    document.getElementById('r-premium').textContent        = fmtCurrency(premium);
+    document.getElementById('r-premiumPct').textContent     = `+${premPct.toFixed(1)}% above conventional`;
+    document.getElementById('r-cptLabel').textContent       = `Cost per Tonne ${efMode === 'wtw' ? 'CO₂e' : 'CO₂'} Avoided`;
+    document.getElementById('r-costPerTonne').textContent   = costPerT !== null ? fmtCurrency(costPerT) : '—';
+    document.getElementById('r-costPerTonneUnit').textContent = `USD / tonne ${efMode === 'wtw' ? 'CO₂e' : 'CO₂'}`;
+
+    // ── IATA formula box (live values) ────────────────────────────────────────
+    document.getElementById('formulaDisplay').textContent =
+      `ERy = ${EF} × [${fmt(mSAF_t)} t × (1 − ${LCASAF} / 89)] = ${fmt(ER_t)} t`;
+    document.getElementById('formula-ef').textContent    = `${EF} kg ${efMode === 'wtw' ? 'CO₂e' : 'CO₂'}/kg`;
+    document.getElementById('formula-msaf').textContent  = `${fmt(mSAF_t)} t`;
+    document.getElementById('formula-ratio').textContent = `${lcaRatio.toFixed(4)} (${feedRed}% reduction)`;
+
+    // ── Bar chart ──────────────────────────────────────────────────────────────
+    renderChart(baseEmitT, blendedEmitT, blendFrac * 100, efLabel, unitLabel);
+  }
+
+  // ── Bar chart renderer ────────────────────────────────────────────────────────
+
+  /**
+   * Render the two-bar emissions comparison chart.
+   * Bars are proportional to the baseline; the savings summary is appended below.
+   */
+  function renderChart(baseT, blendedT, blendPct, efLabel, unitLabel) {
+    const maxT    = Math.max(baseT, 0.001);
+    const savings = baseT - blendedT;
+    const savePct = baseT > 0 ? (savings / baseT * 100).toFixed(1) : '0.0';
+
+    const bars = [
+      { label: '100% Conventional (CAF)',          val: baseT,    cls: 'conventional', color: 'var(--red)'   },
+      { label: `${blendPct.toFixed(0)}% SAF Blend`, val: blendedT, cls: 'blended',      color: 'var(--green)' },
+    ];
+
+    document.getElementById('chart').innerHTML =
+      bars.map(b => {
+        const widthPct    = Math.max((b.val / maxT) * 100, 0.2).toFixed(1);
+        const labelInside = b.val > maxT * 0.22;
+        return `
+          <div class="bar-row">
+            <span class="bar-label">${b.label}</span>
+            <div class="bar-track">
+              <div class="bar-fill ${b.cls}" style="width:${widthPct}%">
+                ${labelInside ? fmt(b.val) + ' t' : ''}
+              </div>
+            </div>
+            <span class="bar-amount" style="color:${b.color}">${fmt(b.val)} t</span>
+          </div>`;
+      }).join('') +
+      `<div style="margin-top:0.5rem;font-size:0.8rem;color:var(--green);font-weight:600;">
+         ERy (${efLabel}): ${fmt(savings)} ${unitLabel} &nbsp;(${savePct}% reduction)
+       </div>`;
+  }
+
+  // ── Initialisation ────────────────────────────────────────────────────────────
+
+  /** Populate the feedstock <select> from the FEEDSTOCKS data array. */
+  function initFeedstockOptions() {
+    const sel = document.getElementById('feedstock');
+    FEEDSTOCKS.forEach((f, i) => {
+      const opt       = document.createElement('option');
+      opt.value       = f.ci;
+      opt.textContent = f.label;
+      if (i === 0) opt.selected = true;
+      sel.appendChild(opt);
+    });
+  }
+
+  /** Wire all event listeners in JS (no inline HTML event attributes used). */
+  function initEventListeners() {
+    document.getElementById('unitSelect').addEventListener('change', e => setUnit(e.target.value));
+    document.getElementById('btnWTW').addEventListener('click', () => setEF('wtw'));
+    document.getElementById('btnTTW').addEventListener('click', () => setEF('ttw'));
+
+    document.getElementById('blendSlider').addEventListener('input', function () {
+      document.getElementById('blendDisplay').textContent = this.value + '%';
+      calculate();
+    });
+
+    ['fuelVolume', 'feedstock', 'convPrice', 'safPrice'].forEach(id =>
+      document.getElementById(id).addEventListener('input', calculate)
+    );
+  }
+
+  // Bootstrap — order matters: options first, then listeners, then initial calc
+  initFeedstockOptions();
+  initEventListeners();
+  calculate();
+</script>
+</body>
+</html>
