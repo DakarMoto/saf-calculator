@@ -1,10 +1,10 @@
 {
-  "fetchedAt": "2026-03-03T12:01:57.059Z",
-  "priceDate": "2026-03-02",
+  "fetchedAt": "2026-03-03T20:56:24.897Z",
+  "priceDate": "2026-03-03",
   "source": "QCIntel SAFARS-SPO",
   "location": "FOB ARA",
-  "pricePerMT": 2513.5,
-  "pricePerLitre": 1.9103,
+  "pricePerMT": 2633,
+  "pricePerLitre": 2.0011,
   "currency": "USD",
   "density": 0.76
 }
