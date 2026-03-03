@@ -78,6 +78,48 @@
     header h1 { font-size: 2.1rem; font-weight: 700; letter-spacing: -0.5px; }
     header p  { margin-top: 0.4rem; font-size: 0.95rem; opacity: 0.7; }
 
+    /* ── Live price badge ── */
+    .live-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 0.68rem;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      color: var(--green);
+      background: var(--green-bg);
+      border: 1px solid var(--green-border);
+      border-radius: 20px;
+      padding: 2px 8px 2px 6px;
+      margin-left: 6px;
+      vertical-align: middle;
+      cursor: default;
+    }
+    .live-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--green);
+      animation: livePulse 2s ease-in-out infinite;
+      flex-shrink: 0;
+    }
+    @keyframes livePulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.35; }
+    }
+    .live-date {
+      font-size: 0.68rem;
+      font-weight: 400;
+      color: var(--muted);
+      margin-left: 4px;
+      vertical-align: middle;
+    }
+    .live-note {
+      margin-top: 0.35rem;
+      font-size: 0.72rem;
+      color: var(--muted);
+    }
+
     /* ── Layout ── */
     .container { max-width: 1120px; margin: 0 auto; padding: 2rem 1.5rem 3rem; }
     .main-grid {
@@ -395,11 +437,20 @@
           </div>
         </div>
         <div class="form-group">
-          <label>SAF Price</label>
+          <label>
+            SAF Price
+            <span id="livePriceBadge" class="live-badge" style="display:none" title="Populated from QCIntel SAFARS-SPO FOB ARA spot price">
+              <span class="live-dot"></span>Live price
+            </span>
+            <span id="livePriceDate" class="live-date"></span>
+          </label>
           <div class="price-row">
             <span class="dollar">$</span>
             <input type="number" id="safPrice" value="2.50" min="0" step="0.01">
             <span class="price-suffix">/ liter</span>
+          </div>
+          <div id="livePriceNote" class="live-note" style="display:none">
+            QCIntel SAFARS-SPO · FOB ARA · $/MT converted at 0.76 kg/L
           </div>
         </div>
       </div>
@@ -865,10 +916,56 @@
     );
   }
 
+  // ── Live SAF price from prices.json ──────────────────────────────────────────
+
+  /**
+   * Fetch prices.json (written daily by GitHub Actions) and pre-populate
+   * the SAF price input with the live SAFARS-SPO spot price.
+   *
+   * The file stores pricePerLitre (converted from $/MT using SAF density 0.76 kg/L).
+   * We load it into the liters-unit price input directly; if the user has already
+   * switched units, we convert on the fly using the active unit's toLitres factor.
+   *
+   * On any failure (file missing, null price, network error) we leave the
+   * default price in place — silent fallback, no error shown to user.
+   */
+  async function loadLivePrice() {
+    try {
+      const res = await fetch('prices.json', { cache: 'no-cache' });
+      if (!res.ok) return;                       // file not found — keep default
+
+      const data = await res.json();
+      if (!data.pricePerLitre) return;           // null price — keep default
+
+      // Convert $/litre to the currently selected display unit
+      const U = UNITS[currentUnit];
+      const priceInUnit = data.pricePerLitre * U.toLitres(1);
+      const priceDec    = currentUnit === 'tonnes' ? 0 : currentUnit === 'lbs' ? 3 : 2;
+
+      document.getElementById('safPrice').value = priceInUnit.toFixed(priceDec);
+
+      // Show the live badge and source note
+      document.getElementById('livePriceBadge').style.display = 'inline-flex';
+      document.getElementById('livePriceNote').style.display  = 'block';
+
+      if (data.priceDate) {
+        document.getElementById('livePriceDate').textContent =
+          '— ' + new Date(data.priceDate).toLocaleDateString('en-GB', {
+            day: 'numeric', month: 'short', year: 'numeric'
+          });
+      }
+
+      calculate();  // recalculate with the live price
+    } catch (_) {
+      // Silent fallback — any fetch or parse error leaves defaults intact
+    }
+  }
+
   // Bootstrap — order matters: options first, then listeners, then initial calc
   initFeedstockOptions();
   initEventListeners();
   calculate();
+  loadLivePrice();  // async — updates price input once prices.json is available
 </script>
 </body>
 </html>

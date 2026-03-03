@@ -1,0 +1,44 @@
+name: Fetch SAF Spot Price
+
+# ─── Schedule ─────────────────────────────────────────────────────────────────
+# Runs Monday–Friday at 18:00 UTC (after European market close)
+# and can be triggered manually via the GitHub Actions UI.
+on:
+  schedule:
+    - cron: '0 18 * * 1-5'
+  workflow_dispatch:          # manual trigger
+
+# ─── Permissions ──────────────────────────────────────────────────────────────
+permissions:
+  contents: write             # required to commit prices.json back to the repo
+
+# ─── Job ──────────────────────────────────────────────────────────────────────
+jobs:
+  fetch-price:
+    name: Fetch & commit SAFARS-SPO price
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Check out the repository
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 2. Run the fetch script (Node.js is pre-installed on ubuntu-latest)
+      - name: Fetch price from QCIntel
+        env:
+          QCINTEL_TOKEN: ${{ secrets.QCINTEL_TOKEN }}
+        run: node scripts/fetch-price.js
+
+      # 3. Commit prices.json only if it changed
+      - name: Commit updated prices.json
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add prices.json
+          # Only commit if the file actually changed
+          if git diff --cached --quiet; then
+            echo "prices.json unchanged — nothing to commit"
+          else
+            git commit -m "chore: update SAF spot price [skip ci]"
+            git push
+          fi
