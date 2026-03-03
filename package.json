@@ -4,9 +4,15 @@
   "description": "SkiesFifty SAF Calculator — tests against IATA methodology",
   "private": true,
   "scripts": {
-    "test": "node tests/iata_harness.js"
+    "test": "node tests/iata_harness.js && npm run test:unit && npm run test:e2e",
+    "test:unit": "jest --config=jest.config.cjs",
+    "test:e2e": "npx playwright test"
   },
   "engines": {
     "node": ">=14"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.43.0",
+    "jest": "^29.0.0"
   }
 }
