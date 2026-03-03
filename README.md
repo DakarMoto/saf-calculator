@@ -163,6 +163,34 @@ All calculator logic is contained in `index.html` by design — no bundler, no f
 
 ---
 
+## Testing and Continuous Integration
+
+This repository includes a small test harness that validates the core IATA ERy calculation against the worked examples in the IATA methodology PDF.
+
+Run tests locally:
+
+```bash
+npm test
+```
+
+CI: A GitHub Actions workflow (`.github/workflows/ci.yml`) runs `npm test` on push and pull requests. The workflow uses Node.js and exits non-zero on failure, preventing merges when tests fail.
+
+If you need additional checks (unit tests for conversion helpers, browser E2E), I can add a Jest suite and a Playwright job.
+
+## Pushing changes to GitHub
+
+If this repository isn't yet on GitHub, push it and enable Actions:
+
+```bash
+# create a repo on GitHub (or use an existing one)
+git remote add origin git@github.com:USERNAME/REPO.git
+git branch -M main
+git push -u origin main
+```
+
+After pushing, add the `QCINTEL_TOKEN` secret under **Settings → Secrets and variables → Actions** to enable the live price fetch workflow.
+
+
 ## Rollback
 
 A git tag `backup-pre-price-integration` marks the state of the repository before the price integration was added.

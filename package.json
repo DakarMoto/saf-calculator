@@ -1,0 +1,12 @@
+{
+  "name": "saf-calc",
+  "version": "1.0.0",
+  "description": "SkiesFifty SAF Calculator — tests against IATA methodology",
+  "private": true,
+  "scripts": {
+    "test": "node tests/iata_harness.js"
+  },
+  "engines": {
+    "node": ">=14"
+  }
+}

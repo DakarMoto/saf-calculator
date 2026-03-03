@@ -432,8 +432,8 @@
           <label>Conventional Jet Fuel Price</label>
           <div class="price-row">
             <span class="dollar">$</span>
-            <input type="number" id="convPrice" value="0.85" min="0" step="0.01">
-            <span class="price-suffix">/ liter</span>
+            <input type="number" id="convPrice" value="1062" min="0" step="1">
+            <span class="price-suffix">/ MT</span>
           </div>
         </div>
         <div class="form-group">
@@ -446,8 +446,18 @@
           </label>
           <div class="price-row">
             <span class="dollar">$</span>
-            <input type="number" id="safPrice" value="2.50" min="0" step="0.01">
-            <span class="price-suffix">/ liter</span>
+            <input type="number" id="safPrice" value="3125" min="0" step="1">
+            <span class="price-suffix">/ MT</span>
+          </div>
+          <div style="margin-top:0.5rem; display:flex; gap:8px; align-items:center;">
+            <label style="font-size:0.78rem; color:var(--muted); margin:0;">Price unit</label>
+            <select id="priceUnitSelect" style="padding:6px 8px; border-radius:6px;">
+              <option value="tonnes" selected>USD / MT</option>
+              <option value="liters">USD / L</option>
+              <option value="gallons">USD / US gal</option>
+              <option value="bbl">USD / bbl</option>
+              <option value="cag">¢ / US gal</option>
+            </select>
           </div>
           <div id="livePriceNote" class="live-note" style="display:none">
             QCIntel SAFARS-SPO · FOB ARA · $/MT converted at 0.76 kg/L
@@ -536,6 +546,52 @@
       <div class="chart-wrap" id="chart"></div>
     </div>
 
+    <!-- ── Quick conversion tool (volume ↔ mass / bbl) — compact full-width layout ── -->
+    <div class="card full-width">
+      <div style="display:flex; align-items:center; gap:18px;">
+        <div style="flex:1; min-width:360px;">
+          <div class="section-title" style="margin:0 0 8px 0;">Quick Fuel Conversions</div>
+          <div style="display:flex; gap:10px; align-items:end;">
+            <div style="flex:0 0 140px;">
+              <label style="display:block; font-size:0.78rem; color:var(--muted);">Amount</label>
+              <input type="number" id="convAmt" value="1" min="0" step="any">
+            </div>
+            <div style="flex:1; display:flex; gap:8px;">
+              <div style="flex:1;">
+                <label style="display:block; font-size:0.78rem; color:var(--muted);">From</label>
+                <select id="convFrom">
+                  <option value="liters">Liters (L)</option>
+                  <option value="gallons">US Gallons (gal)</option>
+                  <option value="bbl">Barrels (bbl)</option>
+                  <option value="kg">Kilograms (kg)</option>
+                  <option value="tonnes">Metric Tonnes (MT)</option>
+                  <option value="lbs">Pounds (lbs)</option>
+                </select>
+              </div>
+              <div style="flex:1;">
+                <label style="display:block; font-size:0.78rem; color:var(--muted);">To</label>
+                <select id="convTo">
+                  <option value="liters">Liters (L)</option>
+                  <option value="gallons">US Gallons (gal)</option>
+                  <option value="bbl">Barrels (bbl)</option>
+                  <option value="kg">Kilograms (kg)</option>
+                  <option value="tonnes">Metric Tonnes (MT)</option>
+                  <option value="lbs">Pounds (lbs)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="flex:0 0 320px; text-align:right;">
+          <div style="font-size:12px; color:var(--muted); margin-bottom:6px;">Result</div>
+          <div id="convResult" style="font-weight:800; font-size:20px;">—</div>
+          <div style="font-size:0.82rem; color:var(--muted); margin-top:6px;">Assumes density <strong id="convDensity">0.800</strong> kg/L</div>
+          <div style="margin-top:8px; font-size:0.82rem;"><a href="https://amelogbook.com/aviatools/FuelConversion/" target="_blank" rel="noopener">More tools</a></div>
+        </div>
+      </div>
+    </div>
+
     <!-- ── Reference & methodology ── -->
     <div class="card full-width">
       <div class="section-title">Reference &amp; Methodology</div>
@@ -576,6 +632,14 @@
         <div class="ref-item">
           <h4>Cost Context</h4>
           <p>SAF currently costs 2–5× conventional jet fuel. US IRA blending credits and EU SAF mandates (2025+) are improving economics. Prices vary by feedstock and region.</p>
+        </div>
+        <div class="ref-item">
+          <h4>Quick Fuel Conversions</h4>
+          <p>
+            The Quick Fuel Conversions tool converts between common aviation fuel units (L, US gal, bbl, kg, MT, lbs).
+            Assumptions: Jet‑A density <strong>0.800 kg/L</strong> (adjusts with temperature), 1 US gallon = <strong>3.785411784 L</strong>, 1 barrel = <strong>158.987294928 L</strong>, 1 MT = <strong>1000 kg</strong>.
+            Use the linked conversion pages for authoritative operational conversions and temperature-corrected density tables.
+          </p>
         </div>
       </div>
     </div>
@@ -659,6 +723,31 @@
   let currentUnit = 'liters';
   let efMode      = 'wtw';    // 'wtw' (IATA Option 2) | 'ttw' (IATA Option 1)
 
+  // Price unit handling (separate from volume unit)
+  const PRICE_UNITS = {
+    liters:  { suffix: '/ liter',     toLitres: 1,           step: 0.01, dec: 2 },
+    gallons: { suffix: '/ US gal',    toLitres: 3.785411784, step: 0.01, dec: 2 },
+    bbl:     { suffix: '/ bbl',       toLitres: 158.987294928, step: 1,   dec: 2 },
+    tonnes:  { suffix: '/ MT',        toLitres: UNITS.tonnes.toLitres(1), step: 1, dec: 0 },
+    cag:     { suffix: '¢ / US gal',  toLitres: 3.785411784, step: 0.01, dec: 4, cents: true },
+  };
+
+  let currentPriceUnit = 'tonnes'; // default to USD/MT
+
+  function setPriceUnit(newKey) {
+    const old = PRICE_UNITS[currentPriceUnit];
+    const neu = PRICE_UNITS[newKey];
+    // convert displayed prices: old $/unit -> $/litre -> new $/unit
+    const convPerL = (parseFloat(document.getElementById('convPrice').value) || 0) / old.toLitres;
+    const safPerL  = (parseFloat(document.getElementById('safPrice').value)  || 0) / old.toLitres;
+    const priceDec = newKey === 'tonnes' ? 0 : newKey === 'cag' ? 4 : 2;
+    document.getElementById('convPrice').value = (convPerL * neu.toLitres).toFixed(priceDec);
+    document.getElementById('safPrice').value  = (safPerL  * neu.toLitres).toFixed(priceDec);
+    document.querySelectorAll('.price-suffix').forEach(el => el.textContent = neu.suffix);
+    currentPriceUnit = newKey;
+    calculate();
+  }
+
   // ── Formatting helpers ────────────────────────────────────────────────────────
 
   /**
@@ -681,6 +770,37 @@
     if (n >= 1e6) return '$' + (n / 1e6).toFixed(2) + 'M';
     if (n >= 1e3) return '$' + n.toLocaleString('en-US', { maximumFractionDigits: 0 });
     return '$' + n.toFixed(2);
+  }
+
+  // ── Quick conversion helpers ───────────────────────────────────────────────
+  const BARREL_LITRES = 158.987294928;
+
+  function toLitresFromKey(key, v) {
+    if (key === 'bbl') return v * BARREL_LITRES;
+    if (!UNITS[key]) return parseFloat(v) || 0;
+    return UNITS[key].toLitres(parseFloat(v) || 0);
+  }
+
+  function fromLitresToKey(key, litres) {
+    if (key === 'bbl') return litres / BARREL_LITRES;
+    if (!UNITS[key]) return litres;
+    return UNITS[key].fromLitres(litres);
+  }
+
+  function convertQuick() {
+    try {
+      const amt = parseFloat(document.getElementById('convAmt').value) || 0;
+      const from = document.getElementById('convFrom').value;
+      const to = document.getElementById('convTo').value;
+      const litres = toLitresFromKey(from, amt);
+      const out = fromLitresToKey(to, litres);
+      const densityEl = document.getElementById('convDensity');
+      if (densityEl) densityEl.textContent = DENSITY.toFixed(3);
+      const unitLabel = (to === 'liters') ? 'L' : (to === 'gallons') ? 'US gal' : (to === 'bbl') ? 'bbl' : (to === 'kg') ? 'kg' : (to === 'tonnes') ? 'MT' : (to === 'lbs') ? 'lbs' : to;
+      document.getElementById('convResult').textContent = `${Number(out.toFixed(out < 1 ? 4 : 2)).toLocaleString('en-US')} ${unitLabel}`;
+    } catch (e) {
+      document.getElementById('convResult').textContent = '—';
+    }
   }
 
   /**
@@ -735,8 +855,9 @@
     document.getElementById('convPrice').step  = newU.priceStep;
     document.getElementById('safPrice').step   = newU.priceStep;
 
-    // Both price suffix labels always show the same unit string
-    document.querySelectorAll('.price-suffix').forEach(el => el.textContent = newU.suffix);
+    // Price suffix labels follow the selected price unit (separate from volume unit)
+    const pSuffix = PRICE_UNITS[currentPriceUnit].suffix;
+    document.querySelectorAll('.price-suffix').forEach(el => el.textContent = pSuffix);
 
     currentUnit = newKey;
     calculate();
@@ -906,6 +1027,10 @@
     document.getElementById('btnWTW').addEventListener('click', () => setEF('wtw'));
     document.getElementById('btnTTW').addEventListener('click', () => setEF('ttw'));
 
+    // Price unit selector (USD/MT default)
+    const priceSel = document.getElementById('priceUnitSelect');
+    if (priceSel) priceSel.addEventListener('change', e => setPriceUnit(e.target.value));
+
     document.getElementById('blendSlider').addEventListener('input', function () {
       document.getElementById('blendDisplay').textContent = this.value + '%';
       calculate();
@@ -914,6 +1039,14 @@
     ['fuelVolume', 'feedstock', 'convPrice', 'safPrice'].forEach(id =>
       document.getElementById(id).addEventListener('input', calculate)
     );
+
+    // Quick conversion tool events
+    ['convAmt','convFrom','convTo'].forEach(id => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener('input', convertQuick);
+      el.addEventListener('change', convertQuick);
+    });
   }
 
   // ── Live SAF price from prices.json ──────────────────────────────────────────
@@ -934,15 +1067,33 @@
       const res = await fetch('prices.json', { cache: 'no-cache' });
       if (!res.ok) return;                       // file not found — keep default
 
-      const data = await res.json();
-      if (!data.pricePerLitre) return;           // null price — keep default
+        const data = await res.json();
+        // try to derive a $/litre base price (prefer explicit pricePerLitre, else compute from pricePerMT)
+        const pricePerL = data.pricePerLitre != null
+          ? data.pricePerLitre
+          : (data.pricePerMT != null && data.density != null)
+            ? (data.pricePerMT * data.density / 1000)
+            : null;
+        if (pricePerL == null) return;           // null price — keep default
 
-      // Convert $/litre to the currently selected display unit
-      const U = UNITS[currentUnit];
-      const priceInUnit = data.pricePerLitre * U.toLitres(1);
-      const priceDec    = currentUnit === 'tonnes' ? 0 : currentUnit === 'lbs' ? 3 : 2;
+        // Convert $/litre to the currently selected price unit and populate SAF input only
+        const P = PRICE_UNITS[currentPriceUnit];
+        const priceInUnit = pricePerL * P.toLitres;
+        const priceDec    = currentPriceUnit === 'tonnes' ? 0 : currentPriceUnit === 'cag' ? 4 : 2;
 
-      document.getElementById('safPrice').value = priceInUnit.toFixed(priceDec);
+        document.getElementById('safPrice').value = priceInUnit.toFixed(priceDec);
+
+        // Show the live badge and source note (keep convPrice untouched to avoid UX confusion)
+        document.getElementById('livePriceBadge').style.display = 'inline-flex';
+        const noteEl = document.getElementById('livePriceNote');
+        noteEl.style.display = 'block';
+        // Describe the source and unit conversion used
+        const densityStr = data.density != null ? String(data.density) : '0.76';
+        if (data.pricePerMT != null) {
+          noteEl.textContent = `QCIntel SAFARS-SPO · FOB ARA · $/MT converted at ${densityStr} kg/L`;
+        } else {
+          noteEl.textContent = `QCIntel SAFARS-SPO · FOB ARA · $/L`;
+        }
 
       // Show the live badge and source note
       document.getElementById('livePriceBadge').style.display = 'inline-flex';
