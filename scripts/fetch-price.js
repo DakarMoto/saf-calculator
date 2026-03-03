@@ -152,17 +152,35 @@ const req = https.get(API_URL, (res) => {
 
     const result = extractPrice(parsed);
     if (!result) {
-      // Log structure to help diagnose the field names
-      console.error('[fetch-price] DEBUG — raw response (first 1500 chars):');
-      console.error(raw.slice(0, 1500));
+      // ── Detailed debug output so we can see the exact API response shape ──
+      console.error('[fetch-price] DEBUG — raw response (first 2000 chars):');
+      console.error(raw.slice(0, 2000));
+
+      // Normalise to array for inspection
+      let items = [];
       if (Array.isArray(parsed)) {
-        console.error(`[fetch-price] DEBUG — array length: ${parsed.length}`);
-        if (parsed[0]) console.error('[fetch-price] DEBUG — first item keys:', Object.keys(parsed[0]).join(', '));
-        if (parsed[0]) console.error('[fetch-price] DEBUG — first item:', JSON.stringify(parsed[0]));
+        items = parsed;
       } else if (parsed && typeof parsed === 'object') {
         console.error('[fetch-price] DEBUG — top-level keys:', Object.keys(parsed).join(', '));
+        for (const key of ['prices', 'data', 'results', 'assessments']) {
+          if (Array.isArray(parsed[key])) { items = parsed[key]; break; }
+        }
       }
-      // Write the raw response to a debug file for inspection
+
+      if (items.length > 0) {
+        console.error(`[fetch-price] DEBUG — ${items.length} item(s) in response`);
+        console.error('[fetch-price] DEBUG — first item keys:', Object.keys(items[0]).join(', '));
+        console.error('[fetch-price] DEBUG — first item:', JSON.stringify(items[0]));
+        // Print every code/name/symbol value so we can find the right one
+        const idFields = ['code','Code','symbol','Symbol','name','Name','label','Label','id','ID'];
+        console.error('[fetch-price] DEBUG — all identifiers found:');
+        items.forEach((item, i) => {
+          const id = idFields.map(f => item[f]).find(v => v !== undefined);
+          console.error(`  [${i}] ${JSON.stringify(id)} — keys: ${Object.keys(item).join(', ')}`);
+        });
+      }
+
+      // Write the raw response to a debug file committed back to the repo
       fs.writeFileSync(OUT_FILE.replace('prices.json', 'prices-debug.json'), raw);
       writeNull(`${CODE} not found in API response`);
       process.exit(1);
