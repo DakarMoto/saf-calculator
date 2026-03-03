@@ -190,6 +190,34 @@ git push -u origin main
 
 After pushing, add the `QCINTEL_TOKEN` secret under **Settings → Secrets and variables → Actions** to enable the live price fetch workflow.
 
+## Sharing / Inviting a collaborator
+
+Quick steps to share this repository with a friend or collaborator:
+
+- Clone (HTTPS):
+
+```bash
+git clone https://github.com/USERNAME/REPO.git
+```
+
+- Clone (SSH):
+
+```bash
+git clone git@github.com:USERNAME/REPO.git
+```
+
+- Invite a collaborator (GitHub UI):
+  1. Go to your repository on GitHub → **Settings** → **Manage access**.
+  2. Click **Invite a collaborator**, enter their GitHub username or email, and set the permission level (Write or Read).
+
+Optionally, you can paste the clone URL and send it directly to your friend. If you prefer the GH CLI, they can clone with:
+
+```bash
+gh repo clone USERNAME/REPO
+```
+
+Note: replace `USERNAME/REPO` with your repository owner/name. For private repos, invite the collaborator first so they can access the clone URL.
+
 
 ## Rollback
 
