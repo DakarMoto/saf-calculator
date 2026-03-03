@@ -44,8 +44,7 @@ const SAF_DENSITY = 0.76;             // kg/L — per QCIntel SAFARS-SPO specifi
 const OUT_FILE    = path.join(__dirname, '..', 'prices.json');
 
 // price_codes= targets the assessment directly; no product filter needed
-// TEMP: using date=current-1 (yesterday) for testing — change back to date=current for production
-const API_URL = `https://www.qcintel.com/api/?action=Prices&date=current-1&format=json&price_codes=${CODE}&token=${TOKEN}`;
+const API_URL = `https://www.qcintel.com/api/?action=Prices&date=current&format=json&price_codes=${CODE}&token=${TOKEN}`;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
