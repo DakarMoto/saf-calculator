@@ -29,13 +29,15 @@ jobs:
           QCINTEL_TOKEN: ${{ secrets.QCINTEL_TOKEN }}
         run: node scripts/fetch-price.js
 
-      # 3. Commit prices.json only if it changed
+      # 3. Commit prices.json (and prices-debug.json if present) only if changed
       - name: Commit updated prices.json
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add prices.json
-          # Only commit if the file actually changed
+          # Also stage the debug file if the script wrote one
+          if [ -f prices-debug.json ]; then git add prices-debug.json; fi
+          # Only commit if anything actually changed
           if git diff --cached --quiet; then
             echo "prices.json unchanged — nothing to commit"
           else

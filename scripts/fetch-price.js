@@ -152,9 +152,19 @@ const req = https.get(API_URL, (res) => {
 
     const result = extractPrice(parsed);
     if (!result) {
-      writeNull(`${CODE} not found in API response`);
+      // Log structure to help diagnose the field names
+      console.error('[fetch-price] DEBUG — raw response (first 1500 chars):');
+      console.error(raw.slice(0, 1500));
+      if (Array.isArray(parsed)) {
+        console.error(`[fetch-price] DEBUG — array length: ${parsed.length}`);
+        if (parsed[0]) console.error('[fetch-price] DEBUG — first item keys:', Object.keys(parsed[0]).join(', '));
+        if (parsed[0]) console.error('[fetch-price] DEBUG — first item:', JSON.stringify(parsed[0]));
+      } else if (parsed && typeof parsed === 'object') {
+        console.error('[fetch-price] DEBUG — top-level keys:', Object.keys(parsed).join(', '));
+      }
       // Write the raw response to a debug file for inspection
       fs.writeFileSync(OUT_FILE.replace('prices.json', 'prices-debug.json'), raw);
+      writeNull(`${CODE} not found in API response`);
       process.exit(1);
       return;
     }
