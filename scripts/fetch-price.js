@@ -39,12 +39,12 @@ const path  = require('path');
 // ── Configuration ──────────────────────────────────────────────────────────────
 
 const TOKEN       = process.env.QCINTEL_TOKEN;
-const PRODUCT     = 'SAFARS';         // QCIntel Quantum Prime Code for SAF assessments
-const CODE        = 'SAFARS-SPO';     // Specific assessment code (Laycan: SPO)
+const CODE        = 'SAFARS-SPO';     // QCIntel assessment code (Quantum Prime: SAFARS, Laycan: SPO)
 const SAF_DENSITY = 0.76;             // kg/L — per QCIntel SAFARS-SPO specification
 const OUT_FILE    = path.join(__dirname, '..', 'prices.json');
 
-const API_URL = `https://www.qcintel.com/api/?action=Prices&date=current&format=json&product=${PRODUCT}&token=${TOKEN}`;
+// price_codes= targets the assessment directly; no product filter needed
+const API_URL = `https://www.qcintel.com/api/?action=Prices&date=current&format=json&price_codes=${CODE}&token=${TOKEN}`;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -150,38 +150,16 @@ const req = https.get(API_URL, (res) => {
       return;
     }
 
+    // Handle empty array — price not yet published today (e.g. before market close)
+    if (Array.isArray(parsed) && parsed.length === 0) {
+      console.log(`[fetch-price] API returned [] — no price published yet today. Keeping existing prices.json.`);
+      process.exit(0);  // success exit — nothing to update
+      return;
+    }
+
     const result = extractPrice(parsed);
     if (!result) {
-      // ── Detailed debug output so we can see the exact API response shape ──
-      console.error('[fetch-price] DEBUG — raw response (first 2000 chars):');
-      console.error(raw.slice(0, 2000));
-
-      // Normalise to array for inspection
-      let items = [];
-      if (Array.isArray(parsed)) {
-        items = parsed;
-      } else if (parsed && typeof parsed === 'object') {
-        console.error('[fetch-price] DEBUG — top-level keys:', Object.keys(parsed).join(', '));
-        for (const key of ['prices', 'data', 'results', 'assessments']) {
-          if (Array.isArray(parsed[key])) { items = parsed[key]; break; }
-        }
-      }
-
-      if (items.length > 0) {
-        console.error(`[fetch-price] DEBUG — ${items.length} item(s) in response`);
-        console.error('[fetch-price] DEBUG — first item keys:', Object.keys(items[0]).join(', '));
-        console.error('[fetch-price] DEBUG — first item:', JSON.stringify(items[0]));
-        // Print every code/name/symbol value so we can find the right one
-        const idFields = ['code','Code','symbol','Symbol','name','Name','label','Label','id','ID'];
-        console.error('[fetch-price] DEBUG — all identifiers found:');
-        items.forEach((item, i) => {
-          const id = idFields.map(f => item[f]).find(v => v !== undefined);
-          console.error(`  [${i}] ${JSON.stringify(id)} — keys: ${Object.keys(item).join(', ')}`);
-        });
-      }
-
-      // Write the raw response to a debug file committed back to the repo
-      fs.writeFileSync(OUT_FILE.replace('prices.json', 'prices-debug.json'), raw);
+      console.error('[fetch-price] ERROR — raw response:', raw.slice(0, 1000));
       writeNull(`${CODE} not found in API response`);
       process.exit(1);
       return;
