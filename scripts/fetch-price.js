@@ -96,20 +96,31 @@ function extractPrice(parsed) {
     if (candidates.length === 0) candidates = [parsed];
   }
 
-  // Find the SAFARS-SPO entry — code field may vary in casing
-  const entry = candidates.find(item =>
-    item && (
+  // Find the SAFARS-SPO entry.
+  // Per QCIntel API docs the response fields are:
+  //   prime_code   — Quantum Prime Code  (e.g. "SAFARS")
+  //   laycan_code  — Quantum Laycan Code (e.g. "SPO")
+  //   Assessment code = prime_code + "-" + laycan_code = "SAFARS-SPO"
+  const entry = candidates.find(item => {
+    if (!item) return false;
+    // Primary match: combine prime_code + laycan_code (official QCIntel field names)
+    if (item.prime_code && item.laycan_code) {
+      const combined = `${item.prime_code}-${item.laycan_code}`.toUpperCase();
+      if (combined === CODE) return true;
+    }
+    // Fallback: check any single field that might hold the full assessment code
+    return (
       (item.code  && String(item.code).toUpperCase()  === CODE) ||
       (item.Code  && String(item.Code).toUpperCase()  === CODE) ||
       (item.name  && String(item.name).toUpperCase()  === CODE) ||
       (item.label && String(item.label).toUpperCase() === CODE)
-    )
-  );
+    );
+  });
 
   if (!entry) return null;
 
-  // Price field may be named "price", "value", "mid", "close"
-  const rawPrice = entry.price ?? entry.value ?? entry.mid ?? entry.close ?? null;
+  // Per QCIntel API docs the price field is "value"; low/high also available
+  const rawPrice = entry.value ?? entry.price ?? entry.mid ?? entry.close ?? null;
   const rawDate  = entry.date  ?? entry.Date  ?? entry.publishDate ?? null;
 
   if (rawPrice === null || rawPrice === undefined) return null;

@@ -5,7 +5,7 @@ name: Fetch SAF Spot Price
 # and can be triggered manually via the GitHub Actions UI.
 on:
   schedule:
-    - cron: '0 18 * * 1-5'
+    - cron: '30 20 * * 1-5'   # Mon–Fri 20:30 UTC — after QCIntel Biofuels publish at 20:00 UTC
   workflow_dispatch:          # manual trigger
 
 # ─── Permissions ──────────────────────────────────────────────────────────────
