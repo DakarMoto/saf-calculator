@@ -39,8 +39,8 @@ const path  = require('path');
 // ── Configuration ──────────────────────────────────────────────────────────────
 
 const TOKEN       = process.env.QCINTEL_TOKEN;
-const PRODUCT     = 'BIOF';           // QCIntel product family
-const CODE        = 'SAFARS-SPO';     // Specific assessment code
+const PRODUCT     = 'SAFARS';         // QCIntel Quantum Prime Code for SAF assessments
+const CODE        = 'SAFARS-SPO';     // Specific assessment code (Laycan: SPO)
 const SAF_DENSITY = 0.76;             // kg/L — per QCIntel SAFARS-SPO specification
 const OUT_FILE    = path.join(__dirname, '..', 'prices.json');
 
