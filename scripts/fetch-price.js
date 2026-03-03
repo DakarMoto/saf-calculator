@@ -159,9 +159,9 @@ const req = https.get(API_URL, (res) => {
 
     const result = extractPrice(parsed);
     if (!result) {
-      console.error('[fetch-price] ERROR — raw response:', raw.slice(0, 1000));
-      writeNull(`${CODE} not found in API response`);
-      process.exit(1);
+      console.log('[fetch-price] raw response:', raw.slice(0, 1000));
+      console.log(`[fetch-price] ${CODE} not found in API response — price not yet published. Keeping existing prices.json.`);
+      process.exit(0);  // not an error — price just isn't available yet
       return;
     }
 
