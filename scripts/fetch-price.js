@@ -70,66 +70,60 @@ function writeNull(reason) {
 }
 
 /**
- * Search a parsed API response (any shape) for the SAFARS-SPO price entry.
+ * Search a parsed API response for the SAFARS-SPO price entry.
  *
- * QCIntel may return:
- *   - An array at the root level
- *   - An object with a "prices", "data", or "results" array key
- *   - A single object
+ * Actual QCIntel response shape:
+ *   [{ prime_code: "SAFARS", date: "YYYY-MM-DD", values: [{ laycan_code: "SPO", value: 2513.5 }] }]
  *
  * Returns { price: <number>, date: <string|null> } or null if not found.
  */
 function extractPrice(parsed) {
-  // Normalise to an array of candidate objects
-  let candidates = [];
-
+  // Normalise to an array of top-level items
+  let items = [];
   if (Array.isArray(parsed)) {
-    candidates = parsed;
+    items = parsed;
   } else if (parsed && typeof parsed === 'object') {
-    // Try common envelope keys
     for (const key of ['prices', 'data', 'results', 'assessments']) {
-      if (Array.isArray(parsed[key])) {
-        candidates = parsed[key];
-        break;
-      }
+      if (Array.isArray(parsed[key])) { items = parsed[key]; break; }
     }
-    // Fallback: treat the single object itself as a candidate
-    if (candidates.length === 0) candidates = [parsed];
+    if (items.length === 0) items = [parsed];
   }
 
-  // Find the SAFARS-SPO entry.
-  // Per QCIntel API docs the response fields are:
-  //   prime_code   — Quantum Prime Code  (e.g. "SAFARS")
-  //   laycan_code  — Quantum Laycan Code (e.g. "SPO")
-  //   Assessment code = prime_code + "-" + laycan_code = "SAFARS-SPO"
-  const entry = candidates.find(item => {
-    if (!item) return false;
-    // Primary match: combine prime_code + laycan_code (official QCIntel field names)
-    if (item.prime_code && item.laycan_code) {
-      const combined = `${item.prime_code}-${item.laycan_code}`.toUpperCase();
-      if (combined === CODE) return true;
+  for (const item of items) {
+    if (!item) continue;
+
+    // QCIntel nests laycan values inside item.values[]
+    if (item.prime_code === 'SAFARS' && Array.isArray(item.values)) {
+      const laycan = item.values.find(v => v && v.laycan_code === 'SPO');
+      if (laycan && laycan.value != null) {
+        const price = parseFloat(laycan.value);
+        if (!isNaN(price) && price > 0) {
+          return { price, date: item.date ? String(item.date) : null };
+        }
+      }
     }
-    // Fallback: check any single field that might hold the full assessment code
-    return (
+
+    // Fallback: flat structure where code + price are on the same object
+    const combined = item.prime_code && item.laycan_code
+      ? `${item.prime_code}-${item.laycan_code}`.toUpperCase()
+      : null;
+    const codeMatch = combined === CODE ||
       (item.code  && String(item.code).toUpperCase()  === CODE) ||
-      (item.Code  && String(item.Code).toUpperCase()  === CODE) ||
-      (item.name  && String(item.name).toUpperCase()  === CODE) ||
-      (item.label && String(item.label).toUpperCase() === CODE)
-    );
-  });
+      (item.Code  && String(item.Code).toUpperCase()  === CODE);
 
-  if (!entry) return null;
+    if (codeMatch) {
+      const rawPrice = item.value ?? item.price ?? item.mid ?? item.close ?? null;
+      if (rawPrice != null) {
+        const price = parseFloat(rawPrice);
+        if (!isNaN(price) && price > 0) {
+          const rawDate = item.date ?? item.Date ?? item.publishDate ?? null;
+          return { price, date: rawDate ? String(rawDate) : null };
+        }
+      }
+    }
+  }
 
-  // Per QCIntel API docs the price field is "value"; low/high also available
-  const rawPrice = entry.value ?? entry.price ?? entry.mid ?? entry.close ?? null;
-  const rawDate  = entry.date  ?? entry.Date  ?? entry.publishDate ?? null;
-
-  if (rawPrice === null || rawPrice === undefined) return null;
-
-  const price = parseFloat(rawPrice);
-  if (isNaN(price) || price <= 0) return null;
-
-  return { price, date: rawDate ? String(rawDate) : null };
+  return null;
 }
 
 // ── Main fetch ─────────────────────────────────────────────────────────────────
